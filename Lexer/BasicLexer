@@ -1,0 +1,137 @@
+using System;
+using System.IO;
+using System.Linq;
+
+namespace VerySimpleInterpreter.Lexer
+{
+    public class BasicLexer
+    {
+        // Propriedades para controlar linha, coluna, nome do arquivo e tabela de símbolos
+        public int Line { get; private set; }
+        public int Column { get; private set; }
+        public string Filename { get; }
+        public SymbolTable SymbolTable { get; }
+
+        private char? _peek;
+        private readonly StreamReader _reader;
+
+        public BasicLexer(string filename, SymbolTable? st = null)
+        {
+            Filename = filename;
+            SymbolTable = st ?? new SymbolTable();
+            _reader = new StreamReader(Filename);
+            Column = Line = 1;
+        }
+
+        public Token GetNextToken()
+        {
+            // Verifica se chegou ao final do arquivo
+            if (_reader.EndOfStream)
+                return new Token(ETokenType.EOF);
+
+            // Ignora caracteres de espaço em branco
+            while (_peek == null || char.IsWhiteSpace(_peek.Value))
+            {
+                _peek = NextChar();
+            }
+            // Gera token com base nos caracteres
+            switch (_peek)
+            {
+                case '+': _peek = null; return new Token(ETokenType.SUM);
+                case '-': _peek = null; return new Token(ETokenType.SUB);
+                case '*': _peek = null; return new Token(ETokenType.MULT);
+                case '/': _peek = null; return new Token(ETokenType.DIV);
+                case '(': _peek = null; return new Token(ETokenType.OE);
+                case ')': _peek = null; return new Token(ETokenType.CE);
+                case '=': _peek = null; return new Token(ETokenType.AT);
+                case '\n':
+                // Lida com o caractere de nova linha
+                    _peek = null;
+                    Column = 1;
+                    Line++;
+                    return new Token(ETokenType.EOL);
+            }
+
+            if (_peek == '$')
+            {
+                 // Lida com nomes de variáveis
+                var varName = " ";
+                while (char.IsLetter(_peek.Value))
+                {
+                    varName += _peek;
+                    _peek = NextChar();
+                }
+
+                var key = SymbolTable.Put(varName, null);
+                return new Token(ETokenType.VAR, key);
+            }
+
+            if (_peek == 'r' && TestSuffix("ead"))
+            {
+                  // Lida com instrução de leitura
+                if (NextChar() == ' ' && NextChar() == '$')
+                {
+                    var varName = " ";
+                    while (char.IsLetter(_peek.Value))
+                    {
+                        varName += _peek;
+                        _peek = NextChar();
+                    }
+
+                    var x = Console.ReadLine();
+                    var k = SymbolTable.Put(varName, int.Parse(x));
+                }
+                return new Token(ETokenType.INPUT);
+            }
+
+            if (_peek == 'w' && TestSuffix("rite"))
+            {
+                 // Lida com instrução de escrita
+                return new Token(ETokenType.OUTPUT);
+            }
+
+            if (char.IsDigit(_peek.Value))
+            {
+                // Lida com literais numéricos
+                var value = 0;
+                while (char.IsDigit(_peek.Value))
+                {
+                    value = 10 * value + GetValue(_peek.Value);
+                    _peek = NextChar();
+                }
+                return new Token(ETokenType.NUM, value);
+            }
+            // Lida com tokens não reconhecidos
+
+            return new Token(ETokenType.ERR);
+        }
+
+        public char NextChar()
+        {
+            // Lê o próximo caractere e atualiza a coluna
+            Column++;
+            return !_reader.EndOfStream ? (char)_reader.Read() : '\0';
+        }
+
+        private bool TestSuffix(string suffix)
+        {
+            // Testa se os próximos caracteres correspondem ao sufixo dado
+            foreach (var c in suffix)
+            {
+                _peek = NextChar();
+                if (_peek != c)
+                {
+                    _peek = null;
+                    return false;
+                }
+            }
+            _peek = null;
+            return true;
+        }
+
+        private int GetValue(char c)
+        {
+            return c - '0';
+        }
+    }
+}
